@@ -1,28 +1,104 @@
-'use strict';
-
 import test from 'ava';
-import renderHTML from '../index';
+import React from 'react';
 import * as ReactDOMServer from 'react-dom/server';
+import renderHTML from '../lib/index';
 
-let renderTest = (t, reactEl, expectedHTML) => {
-  t.same(ReactDOMServer.renderToStaticMarkup(reactEl), expectedHTML);
+const compose = (...fns) => arg => fns.reduceRight((prev, fn) => fn(prev), arg);
+
+const renderTest = (t, reactEl, expectedHTML) => {
+  t.is(ReactDOMServer.renderToStaticMarkup(reactEl), expectedHTML);
 };
 
-let singeElementTest = (t, html) => {
+const singleElementTest = (t, html) => {
   renderTest(t, renderHTML(html), html);
 };
 
 test('returns a single React element rendering a provided HTML', t => {
-  singeElementTest(t, '<ul>' +
+  singleElementTest(t, '<ul>' +
                         '<li><a class="hello" href="https://github.com">hihi</a></li>' +
                         '<li><p><b>hello</b>world</p><p>react</p></li>' +
                       '</ul>');
 });
 
 test('returns an array of React elements if several nodes are provided', t => {
-  let arr = renderHTML('<li><a class="hello" href="https://github.com">hihi</a></li>' +
+  const arr = renderHTML('<li><a class="hello" href="https://github.com">hihi</a></li>' +
                        '<li><p><b>hello</b>world</p><p>react</p></li>');
-  t.same(arr.length, 2);
+  t.is(arr.length, 2);
   renderTest(t, arr[0], '<li><a class="hello" href="https://github.com">hihi</a></li>');
   renderTest(t, arr[1], '<li><p><b>hello</b>world</p><p>react</p></li>');
+});
+
+test('uses the given `renderNode` function', t => {
+  const replaceHref = next => renderNode => (node, key) => {
+    const element = next(renderNode)(node, key);
+    if (node.tagName === 'a') {
+      return React.cloneElement(element, {
+        href: 'https://example.com'
+      });
+    }
+    return element;
+  };
+  const htmlElement = renderHTML(
+    '<ul>' +
+      '<li><a class="hello" href="https://github.com">hihi</a></li>' +
+      '<li><p><b>hello</b>world</p><p>react</p></li>' +
+    '</ul>',
+    replaceHref
+  );
+
+  renderTest(
+    t,
+    htmlElement,
+    '<ul>' +
+      '<li><a class="hello" href="https://example.com">hihi</a></li>' +
+      '<li><p><b>hello</b>world</p><p>react</p></li>' +
+    '</ul>'
+  );
+});
+
+test('can compose `renderNode` functions', t => {
+  const replaceHref = next => renderNode => (node, key) => {
+    const element = next(renderNode)(node, key);
+    if (node.tagName === 'a') {
+      return React.cloneElement(element, {
+        href: 'https://example.com'
+      });
+    }
+    return element;
+  };
+  const replacePs = next => renderNode => (node, key) => {
+    if (node.tagName === 'p') {
+      return React.createElement(node.tagName, {}, 'Redacted');
+    }
+    return next(renderNode)(node, key);
+  };
+  const addLi = next => renderNode => (node, key) => {
+    const element = next(renderNode)(node, key);
+    if (node.tagName === 'ul') {
+      return React.cloneElement(
+        element,
+        {},
+        ...node.childNodes.map(renderNode),
+        React.createElement('li', {}, 'One more')
+      );
+    }
+    return element;
+  };
+  const htmlElement = renderHTML(
+    '<ul>' +
+      '<li><a class="hello" href="https://github.com">hihi</a></li>' +
+      '<li><p><b>hello</b>world</p><p>react</p></li>' +
+    '</ul>',
+    compose(replaceHref, replacePs, addLi)
+  );
+
+  renderTest(
+    t,
+    htmlElement,
+    '<ul>' +
+      '<li><a class="hello" href="https://example.com">hihi</a></li>' +
+      '<li><p>Redacted</p><p>Redacted</p></li>' +
+      '<li>One more</li>' +
+    '</ul>'
+  );
 });
