@@ -1,38 +1,37 @@
-'use strict';
+import parse5 from 'parse5';
+import React from 'react';
+import convertAttr from 'react-attr-converter';
 
-var htmlParser = require('parse5');
-var React = require('react');
-var convertAttr = require('react-attr-converter');
+function baseRenderNode() {
+  return renderNode => (node, key) => {
+    if (node.nodeName === '#text') {
+      return node.value;
+    }
 
-var renderNode = function (node, key) {
-  if (node.nodeName === '#text') {
-    return node.value;
-  }
+    const props = {
+      key,
+      ...node.attrs.reduce((attrs, attr) => ({
+        ...attrs,
+        [convertAttr(attr.name)]: attr.value
+      }), {})
+    };
 
-  var attr = node.attrs.reduce(function (result, attr) {
-    result[convertAttr(attr.name)] = attr.value;
-    return result;
-  }, {key: key});
+    const children = node.childNodes.map(renderNode);
+    return React.createElement(node.tagName, props, ...children);
+  };
+}
 
-  if (node.childNodes.length === 0) {
-    return React.createElement(node.tagName, attr);
-  }
-
-  var children = node.childNodes.map(renderNode);
-  return React.createElement(node.tagName, attr, children);
-};
-
-var renderHTML = function (html) {
-  var htmlAST = htmlParser.parseFragment(html);
+function renderHTML(html, renderNode = next => (...args) => next(...args)) {
+  const htmlAST = parse5.parseFragment(html);
 
   if (htmlAST.childNodes.length === 0) {
     return null;
   }
 
-  var result = htmlAST.childNodes.map(renderNode);
+  const finalRenderNode = (node, key) => renderNode(baseRenderNode())(finalRenderNode)(node, key);
+  const result = htmlAST.childNodes.map(finalRenderNode);
 
   return result.length === 1 ? result[0] : result;
-};
+}
 
-module.exports = renderHTML;
-module.exports.renderHTML = renderHTML;
+export default renderHTML;
