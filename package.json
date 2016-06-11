@@ -1,5 +1,5 @@
 {
-  "name": "react-render-html",
+  "name": "@elliottsj/react-render-html",
   "version": "0.1.4",
   "description": "No more dangerouslySetInnerHTML, render HTML as React element.",
   "main": "lib/index.js",
